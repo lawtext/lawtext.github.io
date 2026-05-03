@@ -1,0 +1,74 @@
+name: GitHub Pages V1
+
+on:
+  # push:
+  #   branches:
+  #     - main
+  # schedule:
+  #   - cron: "5 5 * * 6"
+  workflow_dispatch:
+  # repository_dispatch:
+  #   types: [deploy-event]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+
+    concurrency:
+      group: ${{ github.workflow }}-${{ github.ref }}
+
+    env:
+      USER: ${{ github.repository_owner }}
+      REPO: ${{ github.event.repository.name }}
+      REPO_DATA: ${{ vars.REPO_DATA }}
+      HUGO_VERSION: latest
+      HUGO_ENVIRONMENT: production
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Checkout data repo
+        uses: actions/checkout@v6
+        with:
+          repository: ${{ env.USER }}/${{ env.REPO_DATA }}
+          path: ${{ env.REPO_DATA }}
+          fetch-depth: 1
+          ref: ${{ github.ref }}
+
+      - name: Overwrite
+        run: cp -r ${REPO_DATA}/* ./
+
+      - name: Setup Hugo
+        uses: peaceiris/actions-hugo@v3
+        with:
+          hugo-version: ${{ env.HUGO_VERSION }}
+          extended: true
+
+      - name: Setup Node
+        uses: pnpm/action-setup@v6
+
+      - run: pnpm install
+      - run: hugo mod get -u && hugo mod tidy
+
+      - name: Build Site
+        run: hugo --gc --minify --baseURL https://${USER}.github.io/
+
+      - name: Setup pages
+        uses: actions/configure-pages@v6
+
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v5
+        with:
+          path: ./public
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v5
